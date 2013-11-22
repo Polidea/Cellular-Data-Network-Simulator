@@ -1,0 +1,2 @@
+#!/bin/sh
+[ -L /www/index.html ] && [ -e /www/index-old.html ] && mv /www/index-old.html /www/index.html

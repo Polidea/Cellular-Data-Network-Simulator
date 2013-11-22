@@ -1,0 +1,51 @@
+#!/bin/bash
+
+. /usr/lib/cdns/common.sh
+
+explode_path $PATH_INFO
+
+if ! is_slave_address $REMOTE_ADDR
+then
+	echo "Content-Type: text/html"
+	echo ""
+	echo "<h2>Please connect to Cellular Data Network Simulator!</h2>"
+	exit
+fi
+
+case "${PATHS[1]}" in
+	[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9])
+		update_slave_config $REMOTE_ADDR ${PATHS[1]} $DEFAULT_PROFILE
+		configure_iptables $REMOTE_ADDR
+		configure_qos $REMOTE_ADDR $DEFAULT_PROFILE
+
+		# finish previous packet capture
+		DUMP_PID=$STORAGE/dump-$REMOTE_ADDR.pid
+		if [ -e $DUMP_PID ]
+		then
+			kill `cat $DUMP_PID`
+			rm -f $DUMP_PID
+		fi
+
+		# echo result
+		echo "Content-Type: text/html"
+		echo ""
+		cat <<EOF
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="refresh" content="0; URL=/cdns.html" />
+</head>
+<body style="background-color: black">
+<a style="color: white; text-decoration: none" href="/cdns.html">Cellular Data Network Simulator</a>
+</body>
+</html>
+EOF
+		;;
+
+	*)
+		echo "Content-Type: text/html"
+		echo ""
+		echo "<h2>BAD activation code!</h2>"
+		;;
+esac

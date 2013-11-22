@@ -1,0 +1,180 @@
+#!/bin/bash /etc/rc.common
+
+START=99
+STOP=99
+
+. /usr/lib/cdns/common.sh
+
+generate_profiles() {
+	local name
+	local in_htb
+	local in_netem
+	local out_htb
+	local out_netem
+
+	config_get name $1 name
+	[ -z "$name" ] && return
+	config_get in_htb $1 in "rate 100Mbit"
+	config_get in_netem $1 in_netem "delay 0ms"
+	config_get out_htb $1 out "rate 100Mbit"
+	config_get out_netem $1 out_netem "delay 0ms"
+
+	cat <<EOF
+PROFILE[$1]="$name"
+PROFILE_IN_HTB[$1]="$in_htb"
+PROFILE_IN_NETEM[$1]="$in_netem"
+PROFILE_OUT_HTB[$1]="$out_htb"
+PROFILE_OUT_NETEM[$1]="$out_netem"
+
+EOF
+}
+
+generate_interface_list() {
+	local ifname
+	config_get ifname "$1" ifname
+	echo -n "$ifname "
+}
+
+generate_interface_subnets() {
+	local ifname
+	config_get ifname "$1" ifname
+	[ -z "$ifname" ] && return
+	ip route list dev $ifname proto kernel | while read IP OTHER
+	do
+		echo -n "$IP "
+	done
+}
+
+generate_allowed_subnets() {
+	echo -n "$1 "
+}
+
+generate_config() {
+	config_load cdns
+	include /lib/network
+	scan_interfaces
+
+	local ifbname
+	local leases
+	local storage
+	local max_capture_size
+	local max_capture_time
+	local default_profile
+
+	config_load cdns
+	config_get ifbname globals ifbname "ifb1"
+	config_get storage globals storage "/tmp/testing"
+	config_get leases globals dhcpleases "/tmp/dhcp.leases"
+	config_get max_capture_size globals max_capture_size "1M"
+	config_get max_capture_time globals max_capture_time "60"
+	config_get default_profile globals default_profile "full"
+
+	echo "# General config"
+	echo "STORAGE=$storage"
+	echo "DHCP_LEASES=$leases"
+	echo "MAX_CAPTURE_SIZE=$max_capture_size"
+	echo "MAX_CAPTURE_TIME=$max_capture_time"
+	echo "DEFAULT_PROFILE=$default_profile"
+	echo ""
+
+	echo "# Profiles config"
+	config_foreach generate_profiles profile
+	echo ""
+
+	echo "# Interface configuration"
+	echo "IN_IFNAME=$ifbname"
+
+	echo -n "OUT_IFNAME=( "
+	config_list_foreach globals interface generate_interface_list
+	echo ")"
+
+	echo -n "OUT_SUBNETS=( "
+	config_list_foreach globals interface generate_interface_subnets
+	echo ")"
+
+	echo -n "ALLOWED_SUBNETS=( "
+	ip addr | grep "inet " | while read INET IP OTHER
+	do
+		IP=${IP/\/*/}
+		echo -n "$IP "
+	done
+	config_list_foreach globals allowed_subnets generate_allowed_subnets
+	echo ")"
+	echo ""
+
+	echo "CONFIG_DONE=1"
+}
+
+start() {
+	generate_config > $CDNS_CFG
+	. $CDNS_CFG
+
+	[ ! -e /dev/fd ] && ln -s /proc/self/fd /dev/fd
+	[ -n $STORAGE ] && mkdir -p $STORAGE
+
+	if [ -n "$IN_IFNAME" ]
+	then
+		echo "Configuring $IN_IFNAME..."
+		ifconfig $IN_IFNAME up
+		tc qdisc del dev $IN_IFNAME root 2>/dev/null
+		tcc qdisc add dev $IN_IFNAME handle 1: root htb
+		tcc class add dev $IN_IFNAME parent 1: classid 1:1 htb rate 100Mbps
+
+		for subnet in "${ALLOWED_SUBNETS[@]}"
+		do
+			tcc filter add dev $IN_IFNAME protocol ip parent 1:0 prio 3 u32 match ip dst $subnet flowid 1:1
+		done
+	fi
+
+	for i in "${OUT_IFNAME[@]}"
+	do
+		echo "Configuring $i..."
+		ifconfig $i up
+		tc qdisc del dev $i root 2>/dev/null
+		tcc qdisc add dev $i handle 1: root htb
+		tcc class add dev $i parent 1: classid 1:1 htb rate 100Mbps
+
+		for subnet in "${ALLOWED_SUBNETS[@]}"
+		do
+			tcc filter add dev $i protocol ip parent 1:0 prio 3 u32 match ip src $subnet flowid 1:1
+		done
+
+		if [ -n "$IN_IFNAME" ]
+		then
+			tc qdisc del dev $i ingress 2>/dev/null
+			tcc qdisc add dev $i ingress
+			tcc filter add dev $i parent ffff: \
+			   protocol ip u32 match u32 0 0 flowid 1:1 action mirred egress redirect dev $IN_IFNAME
+		fi
+	done
+
+	echo "Configuring devices..."
+	for i in $(find $STORAGE -name 'slave-*.cfg')
+	do
+		IP=$(basename $i .cfg)
+		IP=${IP/slave-/}
+		STATUS=($(read_slave_config $IP))
+		echo "... $IP ${STATUS[1]}"
+		configure_iptables $IP
+		[ "${STATUS[1]}" != "" ] && configure_qos $IP ${STATUS[1]}
+	done
+}
+
+stop() {
+	if [ ! -e $CDNS_CFG ]
+	then
+		echo "cdns: not running..."
+		return
+	fi
+	. $CDNS_CFG
+
+	[ "$IN_IFNAME" ] && tc qdisc del dev $IN_IFNAME root 2>/dev/null
+
+	for i in "${OUT_IFNAME[@]}"
+	do
+		tc qdisc del dev $i root 2>/dev/null
+		tc qdisc del dev $i ingress 2>/dev/null
+	done
+
+	rm $CDNS_CFG
+}

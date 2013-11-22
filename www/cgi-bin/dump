@@ -1,0 +1,142 @@
+#!/bin/bash
+
+. /usr/lib/cdns/common.sh
+
+CODE=$(read_master_config $REMOTE_ADDR)
+
+echo "Content-Type: application/json"
+echo ""
+
+explode_path $PATH_INFO
+
+if valid_ip "${PATHS[2]}"
+then
+	STATUS=($(read_slave_config ${PATHS[2]}))
+	if [ "$CODE" != "${STATUS[0]}" ] && [ "${PATHS[2]}" != "$REMOTE_ADDR" ]
+	then
+		cat <<EOF
+{"status": 0, "error": "access denied"}
+EOF
+		exit
+	fi
+	UPDATEIP=${PATHS[2]}
+else
+	cat <<EOF
+{"status": 0, "error": "invalid ip address"}
+EOF
+	exit
+fi
+
+DUMP_PID=$STORAGE/dump-${PATHS[2]}.pid
+
+case ${PATHS[1]} in
+start)
+	(
+	if [ -e $DUMP_PID ]
+	then
+		kill `cat $DUMP_PID`
+		rm -f $DUMP_PID
+		sleep 2s
+	fi
+
+	if [ "$OUT_IFNAME" == "" ]
+	then
+		exit 1
+	fi
+
+	[ "$MAX_CAPTURE_SIZE" == "" ] && MAX_CAPTURE_SIZE=1M
+	[ "$MAX_CAPTURE_TIME" == "" ] && MAX_CAPTURE_TIME=60
+
+	EVENT_ID="$(generate_random_number)-$(generate_random_number)-$(generate_random_number)-$(generate_random_number)"
+	DUMP_FILE=$STORAGE/dump-${EVENT_ID}-${PATHS[2]}.pcap
+
+	tcpdump -i $OUT_IFNAME -w ${DUMP_FILE}. -W 10 -C $MAX_CAPTURE_SIZE -G $MAX_CAPTURE_TIME host "${PATHS[2]}" &
+	PID=$!
+	echo $PID > $DUMP_PID
+	push_event $EVENT_ID DUMP "Started packet recording for ${PATHS[2]}..."
+
+	sleep 1s
+	while [ -e ${DUMP_FILE}.0 ]
+	do
+		sleep 5s
+		MAX_CAPTURE_TIME=$(($MAX_CAPTURE_TIME-5))
+		if [ -e ${DUMP_FILE}.1 ] || [ $MAX_CAPTURE_TIME -le 0 ]
+		then
+			kill $PID
+			break
+		fi
+	done &
+	PID_SIZE=$!
+
+	if ! wait $PID
+	then
+		kill $PID_SIZE
+		rm -f $DUMP_PID
+		rm -f $DUMP_FILE.*
+
+		push_event $EVENT_ID FAIL "Packet recording failed for ${PATHS[2]} with $?."
+		exit 1
+	fi
+
+	kill $PID_SIZE
+	rm -f $DUMP_PID
+	rm -f $DUMP_FILE.[1-9]*
+
+	FILE_SIZE=0
+	FILE_INFO=($(ls -l ${DUMP_FILE}.0))
+	[ "${FILE_INFO[4]}" != "" ] && FILE_SIZE=${FILE_INFO[4]}
+	if [ $FILE_SIZE -le 24 ]
+	then
+		rm -f $DUMP_FILE.*
+		push_event $EVENT_ID WARN "Nothing recorded for ${PATHS[2]}."
+		exit 1
+	fi
+
+	for i in 1 2 3
+	do
+		push_event $EVENT_ID UPLOAD "Uploading capture for ${PATHS[2]} to CloudShark ($i try)..."
+		JSON_STATUS=`curl -F "capture[upload]=@${DUMP_FILE}.0" http://www.cloudshark.org/captures.json`
+		if [ $? -eq 0 ]
+		then
+			rm -f $DUMP_FILE.*
+			push_event $EVENT_ID CLOUDSHARK "$JSON_STATUS"
+			exit 0
+		fi
+		sleep 3s
+	done
+
+	rm -f $DUMP_FILE.*
+	push_event $EVENT_ID FAIL "Failed to push the recording for ${PATHS[2]} to CloudShark."
+	exit 1
+	) &
+
+	sleep 1s
+	cat <<EOF
+{"status": 1}
+EOF
+	;;
+
+stop)
+	if [ -e $DUMP_PID ]
+	then
+		kill `cat $DUMP_PID`
+		rm -f $DUMP_PID
+		sleep 1s
+		cat <<EOF
+{"status": 1}
+EOF
+	else
+		cat <<EOF
+{"status": 0, "error": "no record session found"}
+EOF
+	fi
+
+	;;
+
+*)
+	cat <<EOF
+{"status": 0, "error": "invalid command name"}
+EOF
+	;;
+esac
+

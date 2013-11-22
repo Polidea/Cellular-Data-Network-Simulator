@@ -1,0 +1,499 @@
+
+<!DOCTYPE html>
+<html lang="en">
+ <head>
+  <meta charset="utf-8">
+  <title>Cellular Data Network Simulator</title>
+  <!--[if lt IE 9]><script src="/luci-static/bootstrap/html5.js"></script><![endif]-->
+  <meta name="viewport" content="initial-scale=1.0">
+  <link rel="stylesheet" href="/luci-static/bootstrap/cascade.css">
+  <link rel="stylesheet" media="only screen and (max-device-width: 854px)" href="/luci-static/bootstrap/mobile.css" type="text/css" />
+  <link rel="shortcut icon" href="/luci-static/bootstrap/favicon.ico">
+  <script src="/luci-static/resources/xhr.js"></script>
+
+  <style media="screen" type="text/css">
+	.cbi-button-loading,
+	.cbi-input-loading {
+		background-position: 6px center, left top;
+		padding-left: 28px;
+		background-image: url('luci-static/resources/icons/loading.gif'), -webkit-gradient(linear, 0 0, 0 100%, from(#ffffff), color-stop(25%, #ffffff), to(#e6e6e6));
+		background-image: url('luci-static/resources/icons/loading.gif'), -webkit-linear-gradient(#ffffff, #ffffff 25%, #e6e6e6);
+		background-image: url('luci-static/resources/icons/loading.gif'), -moz-linear-gradient(top, #ffffff, #ffffff 25%, #e6e6e6);
+		background-image: url('luci-static/resources/icons/loading.gif'), -ms-linear-gradient(#ffffff, #ffffff 25%, #e6e6e6);
+		background-image: url('luci-static/resources/icons/loading.gif'), -o-linear-gradient(#ffffff, #ffffff 25%, #e6e6e6);
+		background-image: url('luci-static/resources/icons/loading.gif'), linear-gradient(#ffffff, #ffffff 25%, #e6e6e6);
+	}
+
+	.loading { 
+	    display: block;
+	    margin:0 auto;
+	    width: 100%;
+	    vertical-align: middle;
+     	text-align: center;
+	}
+	</style>
+ </head>
+
+<body class="lang_enOverview">
+
+<script type="text/javascript" src="/luci-static/resources/cbi.js"></script>
+<script type="text/javascript">//<![CDATA[
+	function formatSizeUnits(bytes, unit){
+      if      (bytes>=1073741824) {bytes=(bytes/1073741824).toFixed(2)+'G'+unit;}
+      else if (bytes>=1048576)    {bytes=(bytes/1048576).toFixed(2)+'M'+unit;}
+      else if (bytes>=1024)       {bytes=(bytes/1024).toFixed(2)+'k'+unit;}
+      else if (bytes>0)           {bytes=bytes.toFixed(0)+unit;}
+      else                        {bytes='0'+unit;}
+      return bytes;
+	}
+
+	var st_devices = new Array();
+	var st_timestamp = null;
+	var st_profiles = new Array();
+
+	function get_profile_name(key)
+	{
+		return st_profiles[key] ? st_profiles[key] : 'Full';
+	}
+
+	function get_current_date()
+	{
+		var currentDate = new Date();
+		var day = currentDate.getDate();
+		if(day < 10) day = "0" + day;
+		var month = currentDate.getMonth() + 1;
+		if(month < 10) month = "0" + month;
+		var year = currentDate.getFullYear();
+		return year + "-" + month + "-" + day;
+	}
+
+	function update_activate_code(info)
+	{
+		var code = document.getElementById('activate_code');
+		if(code) {
+			code.innerHTML = info.code;
+		}
+
+		var qr = document.getElementById('activate_qr');
+		if(qr) {
+			var url = window.location.protocol + "//" + window.location.host;
+			qr.src = "http://chart.googleapis.com/chart?cht=qr&chs=150x150&chl="+url+"/cgi-bin/activate/"+info.code;
+		}
+	}
+
+	function update_profiles(info)
+	{
+		var ps = document.getElementById('profiles');
+		if(!ps)
+			return;
+
+		st_profiles = new Array();
+
+		/* clear all rows */
+		while( ps.rows.length > 1 )
+			ps.rows[0].parentNode.deleteRow(1);
+
+		for(var i = 0; i < info.profiles.length-1; i++) {
+			profile = info.profiles[i];
+			st_profiles[profile.id] = profile.name;
+
+			var tr = ps.rows[0].parentNode.insertRow(-1);
+			tr.className = 'cbi-section-table-row cbi-rowstyle-' + ((i % 2) + 1);
+			tr.insertCell(-1).innerHTML = profile.name;
+			tr.insertCell(-1).innerHTML = profile.upload;
+			tr.insertCell(-1).innerHTML = profile.download;
+		}
+
+		if(ps.rows.length == 1) {
+			var tr = ps.rows[0].parentNode.insertRow(-1);
+				tr.className = 'cbi-section-table-row';
+
+			var td = tr.insertCell(-1);
+				td.colSpan = 7;
+				td.innerHTML = '<em><br />There are no supported profiles.</em>';
+		}
+	}
+
+	function set_own_profile(event) 
+	{
+		this.disabled = true;
+		this.className = 'cbi-button cbi-input-loading';
+		this.value = "";
+
+		XHR.get("/cgi-bin/set/" + this.id, {}, function(x, info) {
+			if(!info.status && info.error) {
+				alert("Failed: " + info.error);
+			}
+			reload_data();
+		});
+	}
+
+	function update_slave_profiles(info)
+	{
+		var ps = document.getElementById('slave_profiles');
+		if(!ps)
+			return;
+
+		ps.innerHTML = "";
+
+		for(var i = 0; i < info.profiles.length-1; i++) {
+			profile = info.profiles[i];
+
+			var input = document.createElement("input");
+			input.className = "cbi-button cbi-input-apply";
+			input.value = profile.name;
+			input.id = profile.id;
+			input.onclick = set_own_profile;
+
+			var p = document.createElement("p");
+			p.appendChild(input);
+
+			ps.appendChild(p);
+		}
+	}
+
+	function update_events(info)
+	{
+		var es = document.getElementById('events');
+		if (!es)
+			return;
+
+		var today_date = get_current_date();
+
+		/* clear all rows */
+		while( es.rows.length > 1 )
+			es.rows[0].parentNode.deleteRow(1);
+
+		for(var i = info.events.length-1; i-- > 0; ) {
+			evt = info.events[i];
+
+			var tr = es.rows[0].parentNode.insertRow(-1);
+			tr.className = 'cbi-section-table-row cbi-rowstyle-' + ((i % 2) + 1);
+			tr.id = "event_" + evt.id;
+			tr.insertCell(-1).innerHTML = ((today_date != evt.date) ? evt.date + " " : "") + evt.time;
+			tr.insertCell(-1).innerHTML = evt.type;
+			if(evt.type == "CLOUDSHARK") {
+				var link = "http://www.cloudshark.org/captures/" + evt.cloudshark.id;
+				tr.insertCell(-1).innerHTML = "See recorded session: <a target='_blank' href='" + link + "'>" + evt.cloudshark.filename + "</a> (" + formatSizeUnits(evt.cloudshark.data_size, 'B') + ")";
+			} else {
+				tr.insertCell(-1).innerHTML = evt.message;
+			}
+		}
+
+		if(es.rows.length == 1) {
+			var tr = es.rows[0].parentNode.insertRow(-1);
+				tr.className = 'cbi-section-table-row';
+
+			var td = tr.insertCell(-1);
+				td.colSpan = 7;
+				td.innerHTML = '<em><br />There are no events.</em>';
+		}
+	}
+
+	function start_device_recording(event)
+	{
+		this.disabled = true;
+		this.className = 'cbi-button cbi-input-loading';
+		this.value = "";
+		XHR.get("/cgi-bin/dump/start/" + this.id, {}, function(x, info) {
+			if(!info.status && info.error) {
+				alert("Failed: " + info.error);
+			}
+			reload_data();
+		});
+	}
+
+	function stop_device_recording(event)
+	{
+		this.disabled = true;
+		this.className = 'cbi-button cbi-input-loading';
+		this.value = "";
+		XHR.get("/cgi-bin/dump/stop/" + this.id, {}, function(x, info) {
+			if(!info.status && info.error) {
+				alert("Failed: " + info.error);
+			}
+			reload_data();
+		});
+	}
+
+	function set_device_profile(event) 
+	{
+		XHR.get("/cgi-bin/set/" + this.value + "/" + this.id, {}, function(x, info) {
+			if(info.status) {
+				var tr = document.getElementById('device_' + info.ipaddr);
+				if(tr) {
+					var current_profile = st_profiles[info.profile] ? st_profiles[info.profile] : 'Full';
+					tr.cells[3].innerHTML = current_profile;
+				}
+			} else if(!info.status && info.error) {
+				alert("Failed: " + info.error);
+			}
+		});
+	}
+
+	function unpair_device(self)
+	{
+		self.disabled = true;
+		self.className = 'cbi-button cbi-input-loading';
+		self.value = "";
+
+		XHR.get("/cgi-bin/set/full", {}, function(x, info) {
+			if(!info.status && info.error) {
+				alert("Failed: " + info.error);
+			}
+			reload_data();
+		});
+	}
+
+	function update_devices(info)
+	{
+		var ls = document.getElementById('devices');
+		if (!ls)
+			return;
+
+		// save timestamp
+		var elapsed_time = st_timestamp == null ? null : (info.timestamp - st_timestamp);
+		st_timestamp = info.timestamp;
+
+		var device_ids = new Array();
+		for(var i = 0; i < info.devices.length-1; i++) {
+			device = info.devices[i];
+
+			var total_tx = device.tx ? parseInt(device.tx) : 0;
+			var total_rx = device.rx ? parseInt(device.rx) : 0;
+			var tx = 0;
+			var rx = 0;
+
+			if(st_devices[device.ipaddr] && elapsed_time) {
+				tx = (total_tx - st_devices[device.ipaddr]["tx"]) / elapsed_time;
+				rx = (total_rx - st_devices[device.ipaddr]["rx"]) / elapsed_time;
+			}
+
+			st_devices[device.ipaddr] = new Array();
+			st_devices[device.ipaddr]["tx"] = total_tx;
+			st_devices[device.ipaddr]["rx"] = total_rx;
+
+			var current_html = formatSizeUnits(tx * 8, "") + "/" + formatSizeUnits(rx * 8, "");
+			var total_html = formatSizeUnits(total_tx, "") + "/" + formatSizeUnits(total_rx, "");
+			var current_profile = st_profiles[device.profile] ? st_profiles[device.profile] : 'Full';
+
+			var tr = document.getElementById('device_' + device.ipaddr);
+			if(!tr) {
+				var tr = ls.rows[0].parentNode.insertRow(-1);
+				tr.id = 'device_' + device.ipaddr;
+				tr.insertCell(-1).innerHTML = device.hostname ? device.hostname : '?';
+				tr.insertCell(-1).innerHTML = device.ipaddr;
+				tr.insertCell(-1).innerHTML = device.macaddr;
+				tr.insertCell(-1).innerHTML = current_profile;
+				tr.insertCell(-1).innerHTML = current_html;
+				tr.insertCell(-1).innerHTML = total_html;
+				tr.insertCell(-1).innerHTML = "<select name='profile'></select>";
+				tr.insertCell(-1).innerHTML = "<input class='cbi-button cbi-input-apply' type='submit' value='Record'>";
+
+				var profile_selector = tr.cells[6].firstChild;
+				profile_selector.id = device.ipaddr;
+				profile_selector.onchange = set_device_profile;
+
+				for(var j = 0; j < info.profiles.length-1; j++) {
+					profile_selector.options[j] = new Option(info.profiles[j].name, info.profiles[j].id);
+					if(info.profiles[j].name == tr.cells[3].innerHTML) {
+						profile_selector[j].selected = true;
+					}
+				}
+			} else {
+				tr.cells[0].innerHTML = device.hostname ? device.hostname : '?';
+				tr.cells[1].innerHTML = device.ipaddr;
+				tr.cells[2].innerHTML = device.macaddr;
+				tr.cells[3].innerHTML = current_profile;
+				tr.cells[4].innerHTML = current_html;
+				tr.cells[5].innerHTML = total_html;
+			}
+
+			var record_button = tr.cells[7].firstChild;
+			record_button.id = device.ipaddr;
+			record_button.disabled = false;
+			if(device.is_recording) {
+				record_button.onclick = stop_device_recording;
+				record_button.className = 'cbi-button cbi-input-remove';
+				record_button.value = "Stop";
+			} else {
+				record_button.onclick = start_device_recording;
+				record_button.className = 'cbi-button cbi-input-apply';
+				record_button.value = "Start";
+			}
+
+			device_ids['device_' + device.ipaddr] = tr;
+		}
+
+		devicesNode = ls.rows[0].parentNode;
+		for(var i = 1; i < devicesNode.rows.length; ) {
+			var tr = devicesNode.rows[i];
+			if(!device_ids[tr.id]) {
+				ls.rows[0].parentNode.deleteRow(i);
+			} else {
+				tr.className = 'cbi-section-table-row cbi-rowstyle-' + ((i % 2) + 1);
+				i++;
+			}
+		}
+
+		if(ls.rows.length == 1) {
+			var tr = ls.rows[0].parentNode.insertRow(-1);
+				tr.className = 'cbi-section-table-row';
+
+			var td = tr.insertCell(-1);
+				td.colSpan = 8;
+				td.innerHTML = '<em><br />There are no active devices.</em>';
+		}
+	}
+
+	function update_paired(info)
+	{
+		var paired = document.getElementById('paired');
+		var master = document.getElementById('master');
+		var slave = document.getElementById('slave');
+
+		if(info.is_paired) {
+			paired.style.display = 'block';
+
+			var slave_code = document.getElementById('slave_code');
+			slave_code.innerHTML = info.slave_code;
+		} else {
+			paired.style.display = 'none';
+		}
+
+		if(info.is_slave) {
+			var slave_profile = document.getElementById('slave_profile');
+			slave_profile.innerHTML = get_profile_name(info.slave_profile);
+			slave.style.display = 'block';
+		} else {
+			master.style.display = 'block';
+			slave.style.display = 'none';
+		}
+	}
+
+	function update_data(x, info)
+	{
+		// activate section
+		update_paired(info);
+		update_slave_profiles(info);
+		update_activate_code(info);
+		update_profiles(info);
+		update_events(info);
+		update_devices(info);
+	}
+
+	function show_advanced_options()
+	{
+		var master = document.getElementById('master');
+		master.style.display = 'block';
+
+		var show_advanced = document.getElementById('show_advanced');
+		show_advanced.style.display = 'none';
+
+		var hide_advanced = document.getElementById('hide_advanced');
+		hide_advanced.style.display = 'block';
+	}
+
+	function hide_advanced_options()
+	{
+		var master = document.getElementById('master');
+		master.style.display = 'none';
+
+		var show_advanced = document.getElementById('show_advanced');
+		show_advanced.style.display = 'block';
+
+		var hide_advanced = document.getElementById('hide_advanced');
+		hide_advanced.style.display = 'none';
+	}
+
+	function reload_data()
+	{
+		XHR.get('/cgi-bin/fetch', {}, update_data);
+	}
+
+	XHR.poll(5, '/cgi-bin/fetch', {}, update_data);
+//]]></script>
+
+<div id="maincontent" class="container">
+
+	<h2><a id="content" name="content">Welcome to Cellular Data Network Simulator!</a></h2>
+
+	<div id="slave" style="display: none">
+		<h3>You are connected to Cellular Data Network Simulator network. Your current profile is: <span id="slave_profile">...</span>.</h3>
+		<p>&nbsp;</p>
+
+		<div id="paired" style="display: none">
+			<h3>You are currently controlled by: <span id="slave_code">Loading...</span>.</h3>
+			<input class='cbi-button cbi-input-apply' type='submit' value='Unpair' onclick='javascript:unpair_device(this)'>
+			<hr>
+		</div>
+
+		<h3>Click to select a new one:</h3>
+		<div id="slave_profiles"></div>
+
+		<hr>
+		<input id='show_advanced' class='cbi-button cbi-input-apply' type='submit' value='Show Advanced' onclick='javascript:show_advanced_options()'>
+		<input id='hide_advanced' class='cbi-button cbi-input-remove' type='submit' value='Hide Advanced' onclick='javascript:hide_advanced_options()' style='display: none'>
+	</div>
+
+	<div id="master" style="display: none">
+		<div style="display: inline-block">
+			<hr>
+			<h3>Here you can manipulate speed of assigned devices</h3>
+			<p>&nbsp;</p>
+			<!--<p>Put into device the code: <span id="activate_code">Loading...</span>.</p>-->
+			<p>Use QR code to activate the device.</p>
+			<p>&nbsp;</p>
+		</div>
+
+		<div style="display: inline-block; float:right">
+			<img id="activate_qr" alt="Loading..."/>
+		</div>
+
+		<fieldset class="cbi-section">
+			<legend>Active Devices</legend>
+
+			<table class="cbi-section-table" id="devices">
+				<tr class="cbi-section-table-titles">
+					<th class="cbi-section-table-cell" width="200px">Hostname</th>
+					<th class="cbi-section-table-cell" width="*">IP Address</th>
+					<th class="cbi-section-table-cell" width="*">MAC Address</th>
+					<th class="cbi-section-table-cell" width="60px">Current</th>
+					<th class="cbi-section-table-cell" width="100px">TX/RX [bps]</th>
+					<th class="cbi-section-table-cell" width="120px">Total TX/RX [B]</th>
+					<th class="cbi-section-table-cell">Profile</th>
+					<th class="cbi-section-table-cell" width="100px">Capture</th>
+				</tr>
+			</table>
+		</fieldset>
+
+		<fieldset class="cbi-section">
+			<legend>Events</legend>
+
+			<table class="cbi-section-table" id="events">
+				<tr class="cbi-section-table-titles">
+					<th class="cbi-section-table-cell" width="80px">Date</th>
+					<th class="cbi-section-table-cell" width="100px">Type</th>
+					<th class="cbi-section-table-cell">Message</th>
+				</tr>
+			</table>
+		</fieldset>
+
+		<fieldset class="cbi-section">
+			<legend>Supported Profiles</legend>
+
+			<table class="cbi-section-table" id="profiles">
+				<tr class="cbi-section-table-titles">
+					<th class="cbi-section-table-cell" width="100px">Name</th>
+					<th class="cbi-section-table-cell" width="50%">Upload Limits</th>
+					<th class="cbi-section-table-cell" width="50%">Download Limits</th>
+				</tr>
+			</table>
+		</fieldset>
+	</div>
+
+	<footer>Polidea, 2013-11-22, v.0.5-0</footer>
+</div>
+
+</body>
+</html>

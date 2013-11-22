@@ -1,0 +1,63 @@
+#!/bin/bash
+
+. /usr/lib/cdns/common.sh
+
+CODE=$(read_master_config $REMOTE_ADDR)
+
+echo "Content-Type: application/json"
+echo ""
+
+explode_path $PATH_INFO
+
+if ! valid_profile "${PATHS[1]}"
+then
+	cat <<EOF
+{"status": 0, "error": "invalid profile name"}
+EOF
+	exit
+fi
+
+NEW_PROFILE=${PATHS[1]}
+
+if [ "${PATHS[2]}" == "" ]
+then
+	UPDATEIP=$REMOTE_ADDR
+	if ! is_slave_address $REMOTE_ADDR
+	then
+		cat <<EOF
+{"status": 0, "error": "connect to Cellular Data Network Simulator!"}
+EOF
+		exit
+	fi
+
+	# finish previous packet capture
+	DUMP_PID=$STORAGE/dump-$REMOTE_ADDR.pid
+	if [ -e $DUMP_PID ]
+	then
+		kill `cat $DUMP_PID`
+		rm -f $DUMP_PID
+	fi
+elif valid_ip "${PATHS[2]}"
+then
+	STATUS=($(read_slave_config ${PATHS[2]}))
+	if [ "$CODE" != "${STATUS[0]}" ] && [ "${PATHS[2]}" != "$REMOTE_ADDR" ]
+	then
+		cat <<EOF
+{"status": 0, "error": "access denied"}
+EOF
+		exit
+	fi
+	UPDATEIP=${PATHS[2]}
+else
+	cat <<EOF
+{"status": 0, "error": "invalid ip address"}
+EOF
+	exit
+fi
+
+update_slave_config $UPDATEIP ${CODE} $NEW_PROFILE
+configure_qos $UPDATEIP $NEW_PROFILE
+
+cat <<EOF
+{"status": 1, "ipaddr": "$UPDATEIP", "profile": "$NEW_PROFILE"}
+EOF

@@ -1,0 +1,118 @@
+#!/bin/bash
+
+. /usr/lib/cdns/common.sh
+
+echo "Content-Type: application/json"
+echo ""
+
+CODE=$(read_master_config)
+
+declare -A RXs
+declare -A TXs
+
+while read PKTS BYTES TARGET PROT OPT IN OUT SRCIP DESTIP
+do
+	if [ "$TARGET" != "RETURN" ]
+	then
+		continue
+	elif [ "$SRCIP" == "0.0.0.0/0" ]
+	then
+		TXs[$DESTIP]=$BYTES
+	elif [ "$DESTIP" == "0.0.0.0/0" ]
+	then
+		RXs[$SRCIP]=$BYTES
+	fi
+done < <(iptables -L forwarding_rule -xvn)
+
+IS_SLAVE=0
+IS_PAIRED=0
+
+if is_slave_address $REMOTE_ADDR
+then
+	SLAVE_STATUS=($(read_slave_config $REMOTE_ADDR))
+	IS_SLAVE=1
+	[ "${SLAVE_STATUS[0]}" != "" ] && [ "${SLAVE_STATUS[0]}" != "$CODE" ] && IS_PAIRED=1
+fi
+
+cat <<EOF
+{
+	"timestamp": "`date +%s`",
+	"code": "$CODE",
+	"is_slave": $IS_SLAVE,
+	"is_paired": $IS_PAIRED,
+	"remote_addr": "$REMOTE_ADDR",
+EOF
+
+if [ "$IS_SLAVE" == "1" ]
+then
+	cat <<EOF
+	"slave_code": "${SLAVE_STATUS[0]}",
+	"slave_profile": "${SLAVE_STATUS[1]}",
+EOF
+fi
+
+cat <<EOF
+	"devices": [
+EOF
+
+while read TIME MACADDR IPADDR HOSTNAME CLIENTID
+do
+	LEASE_STATUS=($(read_slave_config $IPADDR))
+	if [ "${LEASE_STATUS[0]}" -eq "$CODE" ] || [ "$IPADDR" == "$REMOTE_ADDR" ]
+	then
+		LEASE_DUMP_PID=$STORAGE/dump-$IPADDR.pid
+		LEASE_IS_RECORDING=0
+		[ -e $LEASE_DUMP_PID ] && LEASE_IS_RECORDING=1
+		TX=${TXs[$IPADDR]}
+		RX=${RXs[$IPADDR]}
+		[ "$TX" == "" ] && [ "$RX" == "" ] && configure_iptables $IPADDR
+		cat <<EOF
+		{"hostname": "$HOSTNAME", "ipaddr": "$IPADDR", "macaddr": "$MACADDR", "profile": "${LEASE_STATUS[1]}", "tx": "$TX", "rx": "$RX", "is_recording": $LEASE_IS_RECORDING},
+EOF
+	fi
+done < $DHCP_LEASES
+
+cat <<EOF
+	{} ],
+	"events": [
+EOF
+
+EVENT_PATH=
+get_event_path
+
+while read EVENT_ID DATE TIME TYPE DESCRIPTION
+do
+	case $TYPE in
+		CLOUDSHARK)
+		cat <<EOF
+		{"id": "$EVENT_ID", "date": "$DATE", "time": "$TIME", "type": "$TYPE", "cloudshark": $DESCRIPTION},
+EOF
+		;;
+
+		*)
+		cat <<EOF
+		{"id": "$EVENT_ID", "date": "$DATE", "time": "$TIME", "type": "$TYPE", "message": "$DESCRIPTION"},
+EOF
+		;;
+	esac
+done < $EVENT_PATH
+
+cat <<EOF
+	{} ],
+EOF
+
+cat <<EOF
+	"profiles": [
+EOF
+	for i in "${!PROFILE[@]}"
+	do
+cat <<EOF
+		{"id": "$i", "name": "${PROFILE[$i]}", "upload": "${PROFILE_IN_HTB[$i]} ${PROFILE_IN_NETEM[$i]}", "download": "${PROFILE_OUT_HTB[$i]} ${PROFILE_OUT_NETEM[$i]}"},
+EOF
+	done
+cat <<EOF
+	{} ]
+}
+
+EOF
+

@@ -1,0 +1,3 @@
+#!/bin/sh
+[ -L /www/index.html ] && exit 0
+( [ ! -e /www/index.html ] || mv /www/index.html /www/index-old.html ) && ln -s cdns.html /www/index.html
