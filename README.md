@@ -2,6 +2,8 @@
 
 Cellular Data Network Simulator is dedicated WiFi network to monitor network usage and simulate network link conditions for mobile applications. It uses well established technologies: OpenWrt, tc, iptables and CloudShark.
 
+Read more at [Polidea Blog](http://www.polidea.com/en/Blog,149,Simulating_cellular_data_network_over_Wifi)
+
 ## Features
 
 * Easy to use web and mobile interface
