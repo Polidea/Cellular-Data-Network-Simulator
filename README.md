@@ -13,7 +13,7 @@ Cellular Data Network Simulator is dedicated WiFi network to monitor network usa
 
 ## Requirements
 
-* OpenWrt device running on latest trunk release - can be router or virtual machine
+* OpenWrt device running on **Barrier Breaker** ([trunk repository](http://downloads.openwrt.org/snapshots/trunk/)) - can be router or virtual machine
 * Two network interfaces - one for WAN and one for WIFI/LAN
 
 ## Installation
