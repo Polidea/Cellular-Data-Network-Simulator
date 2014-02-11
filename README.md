@@ -56,7 +56,7 @@ The are a few simple steps to install Cellular Data Network Simulator:
 ## Uninstallation
 
         /etc/init.d/cdns stop
-        opkg uninstall cdns
+        opkg remove cdns
 
 ## Compile yourself
 
