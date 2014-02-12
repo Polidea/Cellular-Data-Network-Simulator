@@ -117,7 +117,7 @@ start() {
 		echo "Configuring $IN_IFNAME..."
 		ifconfig $IN_IFNAME up
 		tc qdisc del dev $IN_IFNAME root 2>/dev/null
-		tcc qdisc add dev $IN_IFNAME handle 1: root htb
+		tcc qdisc add dev $IN_IFNAME handle 1: root htb default 1
 		tcc class add dev $IN_IFNAME parent 1: classid 1:1 htb rate 100Mbps
 
 		for subnet in "${ALLOWED_SUBNETS[@]}"
@@ -131,7 +131,7 @@ start() {
 		echo "Configuring $i..."
 		ifconfig $i up
 		tc qdisc del dev $i root 2>/dev/null
-		tcc qdisc add dev $i handle 1: root htb
+		tcc qdisc add dev $i handle 1: root htb default 1
 		tcc class add dev $i parent 1: classid 1:1 htb rate 100Mbps
 
 		for subnet in "${ALLOWED_SUBNETS[@]}"
