@@ -95,7 +95,7 @@ start)
 	for i in 1 2 3
 	do
 		push_event $EVENT_ID UPLOAD "Uploading capture for ${PATHS[2]} to CloudShark ($i try)..."
-		JSON_STATUS=`curl -F "capture[upload]=@${DUMP_FILE}.0" http://www.cloudshark.org/captures.json`
+		JSON_STATUS=`curl --cacert /usr/lib/cdns/cacert.pem -H "Origin: https://appliance.cloudshark.org" -F "capture[upload]=@${DUMP_FILE}.0" https://www.cloudshark.org/captures.json`
 		if [ $? -eq 0 ]
 		then
 			rm -f $DUMP_FILE.*

@@ -1,5 +1,5 @@
 PACKAGE=cdns
-VER=0.5-1
+VER=0.5-2
 ARCH=all
 
 IPK:=${PACKAGE}_${VER}_${ARCH}.ipk
