@@ -79,9 +79,9 @@ The are a few simple steps to install Cellular Data Network Simulator:
        
 ## FAQ
 
-1. To fix problems with displaying web page after upgrade execute from router's commandline:
+1. To fix problems with displaying web page execute from router's commandline:
 
-        grep -lir "Moved Permanently" /tmp/testing/events*.cfg | xargs rm
+        grep -lir "<html>" /tmp/testing/events*.cfg | xargs rm
 
 
 ## Changelog
