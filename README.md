@@ -25,7 +25,7 @@ The are a few simple steps to install Cellular Data Network Simulator:
 1. Install cdns:
 
         opkg update
-        opkg install http://polidea.github.io/Cellular-Data-Network-Simulator/cdns_0.5-2_all.ipk
+        opkg install http://polidea.github.io/Cellular-Data-Network-Simulator/cdns_0.5-3_all.ipk
         
     Installation of Cellular Data Network Simulator replaces default Luci webpage. The Luci can be accessed using: http://ip-address/index-old.html
 
@@ -89,3 +89,4 @@ The are a few simple steps to install Cellular Data Network Simulator:
 * v.0.5-0: First public release (25.11.2013)
 * v.0.5-1: Bug fixing (12.02.2014)
 * v.0.5-2: Fixed Cloudshark URL and added CA bundle (25.03.2014)
+* v.0.5-3: Fixed #5 (18.09.2014)

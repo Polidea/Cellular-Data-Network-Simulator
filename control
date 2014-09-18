@@ -2,7 +2,7 @@ Package: cdns
 Maintainer: Polidea, Kamil Trzcinski <kamil.trzcinski@polidea.com>
 Section: net
 Priority: Optional
-Version: 0.5-2
+Version: 0.5-3
 Architecture: all
-Depends: bash, tc, kmod-ifb, kmod-sched, flock, uhttpd, ip, tcpdump, luci-theme-bootstrap, luci-lib-web, curl
+Depends: bash, tc, kmod-ifb, kmod-sched, flock, uhttpd, ip, tcpdump, luci-theme-bootstrap, luci-base, curl
 Description: Cellular Data Network Simulator
