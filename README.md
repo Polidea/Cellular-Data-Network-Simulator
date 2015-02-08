@@ -15,7 +15,7 @@ Read more at [Polidea Blog](http://www.polidea.com/en/Blog,149,Simulating_cellul
 
 ## Requirements
 
-* OpenWrt device running on **Barrier Breaker** ([trunk repository](http://downloads.openwrt.org/snapshots/trunk/)) - can be router or virtual machine
+* OpenWrt device running on [**Barrier Breaker**](http://downloads.openwrt.org/barrier_breaker/14.07/) - can be router or virtual machine
 * Two network interfaces - one for WAN and one for WIFI/LAN
 
 ## Installation
