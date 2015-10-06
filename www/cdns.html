@@ -173,8 +173,12 @@
 			tr.insertCell(-1).innerHTML = ((today_date != evt.date) ? evt.date + " " : "") + evt.time;
 			tr.insertCell(-1).innerHTML = evt.type;
 			if(evt.type == "CLOUDSHARK") {
-				var link = "http://www.cloudshark.org/captures/" + evt.cloudshark.id;
-				tr.insertCell(-1).innerHTML = "See recorded session: <a target='_blank' href='" + link + "'>" + evt.cloudshark.filename + "</a> (" + formatSizeUnits(evt.cloudshark.data_size, 'B') + ")";
+				if(evt.cloudshark.exceptions != null) {
+					tr.insertCell(-1).innerHTML = "Upload failed. status: " + evt.cloudshark.status + ", exceptions: " + evt.cloudshark.exceptions;
+				} else {
+					var link = "http://www.cloudshark.org/captures/" + evt.cloudshark.id;
+					tr.insertCell(-1).innerHTML = "See recorded session: <a target='_blank' href='" + link + "'>" + evt.cloudshark.filename + "</a>";
+				}
 			} else {
 				tr.insertCell(-1).innerHTML = evt.message;
 			}

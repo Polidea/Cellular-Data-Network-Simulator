@@ -50,6 +50,12 @@ start)
 	EVENT_ID="$(generate_random_number)-$(generate_random_number)-$(generate_random_number)-$(generate_random_number)"
 	DUMP_FILE=$STORAGE/dump-${EVENT_ID}-${PATHS[2]}.pcap
 
+	if [ "$CLOUDSHARK_API_TOKEN" == "" ] || [ "$CLOUDSHARK_API_TOKEN" == "YOUR_TOKEN_HERE" ]
+	then
+		push_event $EVENT_ID FAIL "Please configure a Cloudshark API token in /etc/config/cdns"
+		exit 1
+	fi
+
 	tcpdump -i $OUT_IFNAME -w ${DUMP_FILE}. -W 10 -C $MAX_CAPTURE_SIZE -G $MAX_CAPTURE_TIME host "${PATHS[2]}" &
 	PID=$!
 	echo $PID > $DUMP_PID
@@ -95,7 +101,7 @@ start)
 	for i in 1 2 3
 	do
 		push_event $EVENT_ID UPLOAD "Uploading capture for ${PATHS[2]} to CloudShark ($i try)..."
-		JSON_STATUS=`curl --cacert /usr/lib/cdns/cacert.pem -H "Origin: https://appliance.cloudshark.org" -F "capture[upload]=@${DUMP_FILE}.0" https://www.cloudshark.org/captures.json`
+		JSON_STATUS=`curl --cacert /usr/lib/cdns/cacert.pem --upload-file "${DUMP_FILE}.0" https://www.cloudshark.org/api/v1/${CLOUDSHARK_API_TOKEN}/upload`
 		if [ $? -eq 0 ]
 		then
 			rm -f $DUMP_FILE.*

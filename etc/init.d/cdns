@@ -60,6 +60,7 @@ generate_config() {
 	local max_capture_size
 	local max_capture_time
 	local default_profile
+	local cloudshark_api_token
 
 	config_load cdns
 	config_get ifbname globals ifbname "ifb1"
@@ -68,6 +69,7 @@ generate_config() {
 	config_get max_capture_size globals max_capture_size "1M"
 	config_get max_capture_time globals max_capture_time "60"
 	config_get default_profile globals default_profile "full"
+	config_get cloudshark_api_token globals cloudshark_api_token ""
 
 	echo "# General config"
 	echo "STORAGE=$storage"
@@ -75,6 +77,7 @@ generate_config() {
 	echo "MAX_CAPTURE_SIZE=$max_capture_size"
 	echo "MAX_CAPTURE_TIME=$max_capture_time"
 	echo "DEFAULT_PROFILE=$default_profile"
+	echo "CLOUDSHARK_API_TOKEN=$cloudshark_api_token"
 	echo ""
 
 	echo "# Profiles config"
