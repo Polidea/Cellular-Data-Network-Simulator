@@ -34,6 +34,8 @@ The are a few simple steps to install Cellular Data Network Simulator:
         vim /etc/config/cdns
 
     By default there are 5 profiles: Full, HSDPA, Edge, GPRS and Disabled.
+    
+    In order to support packet capture uploads to Cloudshark, you must edit the cloudshark_api_token parameter. You must create an account at https://www.cloudshark.org and retrieve your API token from the Preferences / API Tokens drop-down menu.
 
 3. Start the service:
 
