@@ -1,3 +1,9 @@
+---
+
+__This repository is no longer maintained. Issue reports and pull requests will not be attended.__
+
+---
+
 # Cellular Data Network Simulator
 
 Cellular Data Network Simulator is dedicated WiFi network to monitor network usage and simulate network link conditions for mobile applications. It uses well established technologies: OpenWrt, tc, iptables and CloudShark.
